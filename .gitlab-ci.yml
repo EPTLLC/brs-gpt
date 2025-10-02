@@ -1,0 +1,144 @@
+# BRS-GPT: AI-Powered Cybersecurity Analysis Tool
+# Company: EasyProTech LLC (www.easypro.tech)
+# Dev: Brabus
+# Date: 2025-10-03 01:41:52 MSK
+# Status: Created
+# Telegram: https://t.me/easyprotech
+
+# GitLab CI/CD Pipeline for BRS-GPT Security Scanning
+
+stages:
+  - setup
+  - scan
+  - report
+  - deploy
+
+variables:
+  SCAN_TARGET: "example.com"
+  SCAN_PROFILE: "fast"
+  PYTHON_VERSION: "3.10"
+
+.install_brsgpt: &install_brsgpt
+  - pip install --upgrade pip
+  - pip install -e .
+
+setup:
+  stage: setup
+  image: python:${PYTHON_VERSION}
+  script:
+    - *install_brsgpt
+    - brs-gpt version
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .pip-cache/
+  only:
+    - main
+    - develop
+    - merge_requests
+
+security_scan:
+  stage: scan
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - *install_brsgpt
+  script:
+    - mkdir -p results
+    - |
+      brs-gpt start ${SCAN_TARGET} \
+        --profile ${SCAN_PROFILE} \
+        --output results/security-report.html
+  artifacts:
+    name: "brs-gpt-results-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - results/
+    expire_in: 30 days
+    reports:
+      sast: results/*.sarif
+  variables:
+    OPENAI_API_KEY: ${OPENAI_API_KEY}
+  only:
+    - main
+    - develop
+    - merge_requests
+  allow_failure: false
+
+smart_scan:
+  stage: scan
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - *install_brsgpt
+  script:
+    - mkdir -p results/smart
+    - |
+      brs-gpt smart ${SCAN_TARGET} \
+        --profile balanced \
+        --output results/smart/report.html
+  artifacts:
+    name: "brs-gpt-smart-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - results/smart/
+    expire_in: 30 days
+  variables:
+    OPENAI_API_KEY: ${OPENAI_API_KEY}
+  only:
+    - main
+  allow_failure: true
+
+check_critical:
+  stage: report
+  image: python:${PYTHON_VERSION}
+  dependencies:
+    - security_scan
+  script:
+    - apt-get update && apt-get install -y jq
+    - |
+      if [ -f "results/security-report.json" ]; then
+        CRITICAL_COUNT=$(jq '[.vulnerabilities[]? | select(.severity=="critical")] | length' results/security-report.json)
+        echo "Found $CRITICAL_COUNT critical vulnerabilities"
+        
+        if [ "$CRITICAL_COUNT" -gt 0 ]; then
+          echo "::error::Critical vulnerabilities detected!"
+          exit 1
+        fi
+      fi
+  only:
+    - main
+    - develop
+    - merge_requests
+
+pages:
+  stage: deploy
+  dependencies:
+    - security_scan
+  script:
+    - mkdir -p public
+    - cp -r results/* public/
+    - echo "Security reports deployed to GitLab Pages"
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
+
+# Weekly scheduled scan
+scheduled_scan:
+  stage: scan
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - *install_brsgpt
+  script:
+    - mkdir -p results/scheduled
+    - |
+      brs-gpt smart ${SCAN_TARGET} \
+        --profile deep \
+        --output results/scheduled/report.html
+  artifacts:
+    name: "brs-gpt-scheduled-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - results/scheduled/
+    expire_in: 90 days
+  variables:
+    OPENAI_API_KEY: ${OPENAI_API_KEY}
+  only:
+    - schedules

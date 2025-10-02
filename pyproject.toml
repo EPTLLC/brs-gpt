@@ -1,0 +1,29 @@
+# BRS-GPT: Project Configuration
+# Company: EasyProTech LLC (www.easypro.tech)
+# Dev: Brabus
+# Date: 2025-09-16 00:33:00 UTC
+# Status: Modified
+# Telegram: https://t.me/easyprotech
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "I"]
+ignore = [
+  "E501",  # line length handled by formatter/limit
+]
+
+[tool.ruff.isort]
+known-first-party = ["brsgpt"]
+combine-as-imports = true
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+exclude = [
+  "brs_gpt.egg-info",
+  "results",
+]

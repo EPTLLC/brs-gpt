@@ -1,0 +1,232 @@
+# BRS-GPT: AWS CloudFormation Template
+# Company: EasyProTech LLC (www.easypro.tech)
+# Dev: Brabus
+# Date: 2025-09-08 17:15:41 MSK
+# Status: Created
+# Telegram: https://t.me/easyprotech
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'BRS-GPT AI-Powered Cybersecurity Analysis Tool - AWS Deployment'
+
+Parameters:
+  VpcId:
+    Type: String
+    Description: VPC ID where the ECS cluster will be created
+    Default: vpc-12345678
+
+  SubnetIds:
+    Type: CommaDelimitedList
+    Description: List of subnet IDs for the ECS service
+    Default: subnet-12345678,subnet-87654321
+
+  OpenAIApiKey:
+    Type: String
+    Description: OpenAI API Key (store securely)
+    NoEcho: true
+
+  Environment:
+    Type: String
+    Description: Environment name
+    Default: production
+    AllowedValues:
+      - development
+      - staging
+      - production
+
+Resources:
+  # ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub brs-gpt-cluster-${Environment}
+      CapacityProviders:
+        - FARGATE
+        - FARGATE_SPOT
+
+  # Task Execution Role
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub brs-gpt-task-execution-role-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  # Task Role
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub brs-gpt-task-role-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:PutObject
+                    - s3:DeleteObject
+                  Resource: !Sub arn:aws:s3:::brs-gpt-reports-${AWS::Account}/*
+
+  # CloudWatch Log Group
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/brs-gpt-${Environment}
+      RetentionInDays: 30
+
+  # Task Definition
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub brs-gpt-task-${Environment}
+      Cpu: '1024'
+      Memory: '2048'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !Ref TaskExecutionRole
+      TaskRoleArn: !Ref TaskRole
+      ContainerDefinitions:
+        - Name: brs-gpt
+          Image: !Sub ${AWS::Account}.dkr.ecr.${AWS::Region}.amazonaws.com/brs-gpt:latest
+          Essential: true
+          Environment:
+            - Name: OPENAI_API_KEY
+              Value: !Ref OpenAIApiKey
+            - Name: ENVIRONMENT
+              Value: !Ref Environment
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  # Security Group
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for BRS-GPT ECS service
+      VpcId: !Ref VpcId
+      SecurityGroupIngress: []
+
+  # ECS Service
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub brs-gpt-service-${Environment}
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: !Ref SubnetIds
+          SecurityGroups:
+            - !Ref SecurityGroup
+          AssignPublicIp: ENABLED
+
+  # S3 Bucket for reports
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub brs-gpt-reports-${AWS::Account}-${Environment}
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # API Gateway for web interface
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub brs-gpt-api-${Environment}
+      Description: BRS-GPT REST API
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  # Lambda function for API processing
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub brs-gpt-lambda-${Environment}
+      Runtime: python3.10
+      Handler: lambda_function.lambda_handler
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+
+          def lambda_handler(event, context):
+              # BRS-GPT API handler
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps({
+                      'message': 'BRS-GPT API',
+                      'version': '1.0.0'
+                  })
+              }
+      Environment:
+        Variables:
+          OPENAI_API_KEY: !Ref OpenAIApiKey
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub brs-gpt-lambda-role-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+Outputs:
+  ClusterName:
+    Description: ECS Cluster Name
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub brs-gpt-cluster-${Environment}
+
+  ServiceName:
+    Description: ECS Service Name
+    Value: !Ref ECSService
+    Export:
+      Name: !Sub brs-gpt-service-${Environment}
+
+  S3BucketName:
+    Description: S3 Bucket for reports
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub brs-gpt-s3-bucket-${Environment}
+
+  ApiEndpoint:
+    Description: API Gateway endpoint
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod
+    Export:
+      Name: !Sub brs-gpt-api-endpoint-${Environment}

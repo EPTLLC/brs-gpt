@@ -1,0 +1,136 @@
+# BRS-GPT: Google Cloud Build Configuration
+# Company: EasyProTech LLC (www.easypro.tech)
+# Dev: Brabus
+# Date: 2025-09-08 17:15:41 MSK
+# Status: Created
+# Telegram: https://t.me/easyprotech
+
+steps:
+  # Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/brs-gpt:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/brs-gpt:latest'
+      - '.'
+
+  # Push Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/brs-gpt:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/brs-gpt:latest'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'brs-gpt'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/brs-gpt:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars'
+      - 'OPENAI_API_KEY=${_OPENAI_API_KEY}'
+      - '--service-account'
+      - 'brs-gpt-sa@$PROJECT_ID.iam.gserviceaccount.com'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--max-instances'
+      - '10'
+      - '--min-instances'
+      - '0'
+      - '--timeout'
+      - '900'
+
+  # Run security scan
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: gcloud
+    args:
+      - 'beta'
+      - 'container'
+      - 'images'
+      - 'describe'
+      - 'gcr.io/$PROJECT_ID/brs-gpt:$COMMIT_SHA'
+      - '--show-package-vulnerability'
+      - '--format'
+      - 'json'
+
+  # Performance test
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'jobs'
+      - 'execute'
+      - 'brs-gpt-performance-test'
+      - '--region'
+      - 'us-central1'
+      - '--args'
+      - 'start,testphp.vulnweb.com,--profile,lightning,--no-ai'
+      - '--wait'
+
+# Store build artifacts
+artifacts:
+  objects:
+    location: 'gs://brs-gpt-builds/'
+    paths:
+      - 'test-results/*.xml'
+      - 'coverage-reports/*.xml'
+      - 'security-scan-results/*.json'
+
+# Build timeout
+timeout: '1800s'
+
+# Environment variables
+substitutions:
+  _OPENAI_API_KEY: ''
+  _SERVICE_NAME: brs-gpt
+
+# Options
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: '100'
+  substitution_option: 'ALLOW_LOOSE'
+
+# Triggers
+triggers:
+  - name: 'brs-gpt-main-trigger'
+    github:
+      owner: 'EasyProTech'
+      name: 'brs-gpt'
+      push:
+        branch: '^main$'
+
+# Notifications
+notifications:
+  - name: 'brs-gpt-build-notifications'
+    type: slack
+    address: '${_SLACK_WEBHOOK_URL}'
+    payload: |
+      {
+        "text": "BRS-GPT Build ${BUILD_ID}",
+        "blocks": [
+          {
+            "type": "section",
+            "text": {
+              "type": "mrkdwn",
+              "text": "*BRS-GPT Build Status*\nBuild: `${BUILD_ID}`\nStatus: ${BUILD_STATUS}\nBranch: `${BRANCH_NAME}`\nCommit: `${COMMIT_SHA}`"
+            }
+          }
+        ]
+      }

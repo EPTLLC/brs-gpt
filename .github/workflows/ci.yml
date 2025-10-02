@@ -1,0 +1,45 @@
+# BRS-GPT: GitHub Actions CI
+# Company: EasyProTech LLC (www.easypro.tech)
+# Dev: Brabus
+# Date: 2025-09-16 00:33:00 UTC
+# Status: Modified
+# Telegram: https://t.me/easyprotech
+
+name: CI
+
+# NOTE: This workflow is DISABLED by default
+# Uncomment triggers below to enable automatic CI
+
+on:
+  # push:
+  #   branches: [ main ]
+  # pull_request:
+  #   branches: [ main ]
+  workflow_dispatch:  # Manual trigger only
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+      - name: Lint (ruff)
+        run: |
+          if command -v ruff >/dev/null 2>&1; then ruff --version && ruff check .; else echo "ruff not installed"; fi
+      - name: Run tests
+        env:
+          BRS_GPT_CONFIG_DIR: ${{ github.workspace }}/.ci-config
+        run: |
+          mkdir -p "$BRS_GPT_CONFIG_DIR"
+          pytest -q --cov=brsgpt --cov-report=xml

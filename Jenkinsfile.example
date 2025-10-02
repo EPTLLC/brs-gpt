@@ -1,0 +1,156 @@
+// BRS-GPT: AI-Powered Cybersecurity Analysis Tool
+// Company: EasyProTech LLC (www.easypro.tech)
+// Dev: Brabus
+// Date: 2025-10-03 01:41:52 MSK
+// Status: Created
+// Telegram: https://t.me/easyprotech
+
+// Jenkins Pipeline for BRS-GPT Security Scanning
+
+pipeline {
+    agent {
+        docker {
+            image 'python:3.10-slim'
+            args '-v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
+    
+    parameters {
+        string(name: 'TARGET', defaultValue: 'example.com', description: 'Target domain to scan')
+        choice(name: 'PROFILE', choices: ['lightning', 'fast', 'balanced', 'deep'], description: 'Scan profile')
+        booleanParam(name: 'SMART_MODE', defaultValue: false, description: 'Use AI Orchestrator (smart mode)')
+    }
+    
+    environment {
+        OPENAI_API_KEY = credentials('openai-api-key')
+        RESULTS_DIR = 'results'
+    }
+    
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+        timestamps()
+        timeout(time: 60, unit: 'MINUTES')
+    }
+    
+    triggers {
+        // Weekly scan every Monday at 2 AM
+        cron('0 2 * * 1')
+    }
+    
+    stages {
+        stage('Setup') {
+            steps {
+                echo 'Installing BRS-GPT...'
+                sh '''
+                    pip install --upgrade pip
+                    pip install -e .
+                    brs-gpt version
+                '''
+            }
+        }
+        
+        stage('Security Scan') {
+            steps {
+                script {
+                    echo "Scanning target: ${params.TARGET}"
+                    echo "Profile: ${params.PROFILE}"
+                    
+                    sh "mkdir -p ${RESULTS_DIR}"
+                    
+                    if (params.SMART_MODE) {
+                        sh """
+                            brs-gpt smart ${params.TARGET} \\
+                                --profile ${params.PROFILE} \\
+                                --output ${RESULTS_DIR}/report.html
+                        """
+                    } else {
+                        sh """
+                            brs-gpt start ${params.TARGET} \\
+                                --profile ${params.PROFILE} \\
+                                --output ${RESULTS_DIR}/report.html
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Analyze Results') {
+            steps {
+                script {
+                    echo 'Analyzing security findings...'
+                    
+                    // Parse JSON report
+                    def jsonReport = readJSON file: "${RESULTS_DIR}/report.json"
+                    def criticalCount = 0
+                    def highCount = 0
+                    
+                    if (jsonReport.vulnerabilities) {
+                        jsonReport.vulnerabilities.each { vuln ->
+                            if (vuln.severity == 'critical') {
+                                criticalCount++
+                            } else if (vuln.severity == 'high') {
+                                highCount++
+                            }
+                        }
+                    }
+                    
+                    echo "Found ${criticalCount} critical and ${highCount} high severity vulnerabilities"
+                    
+                    // Set build result based on findings
+                    if (criticalCount > 0) {
+                        currentBuild.result = 'FAILURE'
+                        error("Critical vulnerabilities detected!")
+                    } else if (highCount > 5) {
+                        currentBuild.result = 'UNSTABLE'
+                    }
+                }
+            }
+        }
+        
+        stage('Publish Reports') {
+            steps {
+                echo 'Publishing security reports...'
+                
+                // Archive artifacts
+                archiveArtifacts artifacts: "${RESULTS_DIR}/**/*", fingerprint: true
+                
+                // Publish HTML reports
+                publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: RESULTS_DIR,
+                    reportFiles: 'report.html',
+                    reportName: 'BRS-GPT Security Report',
+                    reportTitles: 'Security Scan Results'
+                ])
+                
+                // Record SARIF results
+                recordIssues(
+                    tools: [sarif(pattern: "${RESULTS_DIR}/*.sarif")],
+                    qualityGates: [[threshold: 1, type: 'TOTAL', criticality: 'CRITICAL']]
+                )
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'Security scan completed successfully!'
+            // Add Slack/Email notification
+            // slackSend color: 'good', message: "BRS-GPT scan passed for ${params.TARGET}"
+        }
+        
+        failure {
+            echo 'Security scan failed or found critical issues!'
+            // Add Slack/Email notification
+            // slackSend color: 'danger', message: "BRS-GPT scan failed for ${params.TARGET}"
+        }
+        
+        always {
+            echo 'Cleaning up...'
+            cleanWs()
+        }
+    }
+}
+

@@ -1,0 +1,124 @@
+# BRS-GPT: AI-Powered Cybersecurity Analysis Tool
+# Company: EasyProTech LLC (www.easypro.tech)
+# Dev: Brabus
+# Date: 2025-10-03 01:41:52 MSK
+# Status: Modified
+# Telegram: https://t.me/easyprotech
+
+version: '3.8'
+
+services:
+  # Basic BRS-GPT scanner
+  brs-gpt:
+    build: .
+    container_name: brs-gpt
+    image: brs-gpt:latest
+    volumes:
+      - ./output:/app/output
+      - ./results:/app/results
+      - ./config:/app/.config/brs-gpt
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_SEARCH_MODEL=${OPENAI_SEARCH_MODEL:-gpt-4o-mini-search-preview}
+      - BRS_GPT_CONFIG_DIR=/app/.config/brs-gpt
+    command: ["start", "${TARGET:-example.com}", "--profile", "${PROFILE:-lightning}"]
+    restart: "no"
+    networks:
+      - brs-gpt-network
+
+  # Smart mode scanner (AI Orchestrator)
+  brs-gpt-smart:
+    build: .
+    container_name: brs-gpt-smart
+    image: brs-gpt:latest
+    volumes:
+      - ./results:/app/results
+      - ./config:/app/.config/brs-gpt
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+    command: ["smart", "${TARGET:-example.com}", "--profile", "${PROFILE:-balanced}"]
+    restart: "no"
+    networks:
+      - brs-gpt-network
+    profiles:
+      - smart
+
+  # Live monitoring mode
+  brs-gpt-live:
+    build: .
+    container_name: brs-gpt-live
+    image: brs-gpt:latest
+    volumes:
+      - ./results:/app/results
+      - ./config:/app/.config/brs-gpt
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+    command: [
+      "live", 
+      "${TARGET:-example.com}", 
+      "--cycles", "${CYCLES:-5}",
+      "--interval", "${INTERVAL:-60}",
+      "--profile", "lightning"
+    ]
+    restart: unless-stopped
+    networks:
+      - brs-gpt-network
+    profiles:
+      - live
+
+  # API service (when implemented)
+  brs-gpt-api:
+    build: .
+    container_name: brs-gpt-api
+    image: brs-gpt:latest
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./results:/app/results
+      - ./config:/app/.config/brs-gpt
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - API_KEY=${BRS_GPT_API_KEY:-changeme}
+    command: ["api", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+    networks:
+      - brs-gpt-network
+    profiles:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Cloud deployment variant
+  brs-gpt-cloud:
+    build: .
+    container_name: brs-gpt-cloud
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GCP_SA_KEY=${GCP_SA_KEY:-}
+      - AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID:-}
+    volumes:
+      - cloud-output:/app/output
+      - cloud-results:/app/results
+    command: ["start", "${TARGET_DOMAIN:-example.com}", "--profile", "${PROFILE:-fast}", "-o", "/app/output/report.html"]
+    restart: "no"
+    networks:
+      - brs-gpt-network
+    profiles:
+      - cloud
+
+networks:
+  brs-gpt-network:
+    driver: bridge
+
+volumes:
+  cloud-output:
+  cloud-results:

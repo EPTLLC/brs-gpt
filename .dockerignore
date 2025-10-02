@@ -1,0 +1,75 @@
+# BRS-AI Docker Ignore File
+# Company: EasyProTech LLC (www.easypro.tech)
+# Dev: Brabus
+# Date: 2025-09-08 17:15:41 MSK
+# Status: Created
+# Telegram: https://t.me/easyprotech
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache
+.coverage
+.tox
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.venv
+venv/
+ENV/
+env/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Development files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Output files
+output/
+*.html
+*.json
+*.xml
+*.csv
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile

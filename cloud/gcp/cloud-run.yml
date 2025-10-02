@@ -1,0 +1,141 @@
+# BRS-GPT: Google Cloud Run Deployment
+# Company: EasyProTech LLC (www.easypro.tech)
+# Dev: Brabus
+# Date: 2025-09-08 17:15:41 MSK
+# Status: Created
+# Telegram: https://t.me/easyprotech
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: brs-gpt
+  labels:
+    app: brs-gpt
+    version: v1
+spec:
+  template:
+    metadata:
+      name: brs-gpt-v1
+      annotations:
+        autoscaling.knative.dev/maxScale: "10"
+        autoscaling.knative.dev/minScale: "0"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containers:
+      - image: gcr.io/PROJECT-ID/brs-gpt:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: brs-gpt-secrets
+              key: openai-api-key
+        - name: PORT
+          value: "8080"
+        - name: ENVIRONMENT
+          value: "production"
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 18
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+      serviceAccountName: brs-gpt-sa@PROJECT-ID.iam.gserviceaccount.com
+  traffic:
+  - percent: 100
+    latestRevision: true
+
+---
+# Cloud Storage bucket for reports
+apiVersion: storage.cnrm.cloud.google.com/v1beta1
+kind: StorageBucket
+metadata:
+  name: brs-gpt-reports
+spec:
+  location: us-central1
+  storageClass: STANDARD
+  versioning:
+    enabled: true
+  lifecycle:
+    rules:
+    - action:
+        type: Delete
+      condition:
+        age: 90
+        isLive: false
+
+---
+# Secret Manager for API keys
+apiVersion: secretmanager.cnrm.cloud.google.com/v1beta1
+kind: Secret
+metadata:
+  name: brs-gpt-secrets
+spec:
+  replication:
+    automatic: true
+
+---
+# Service Account
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMServiceAccount
+metadata:
+  name: brs-gpt-sa
+spec:
+  displayName: BRS-GPT Service Account
+
+---
+# IAM Policy for Service Account
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicy
+metadata:
+  name: brs-gpt-sa-policy
+spec:
+  resourceRef:
+    apiVersion: iam.cnrm.cloud.google.com/v1beta1
+    kind: IAMServiceAccount
+    name: brs-gpt-sa
+  bindings:
+  - role: roles/secretmanager.secretAccessor
+    members:
+    - serviceAccount:brs-gpt-sa@PROJECT-ID.iam.gserviceaccount.com
+  - role: roles/storage.objectAdmin
+    members:
+    - serviceAccount:brs-gpt-sa@PROJECT-ID.iam.gserviceaccount.com
+
+---
+# Cloud Build trigger (optional)
+apiVersion: cloudbuild.cnrm.cloud.google.com/v1beta1
+kind: CloudBuildTrigger
+metadata:
+  name: brs-gpt-trigger
+spec:
+  description: BRS-GPT CI/CD Trigger
+  github:
+    owner: EasyProTech
+    name: brs-gpt
+    push:
+      branch: ^main$
+  substitutions:
+    _SERVICE_NAME: brs-gpt
+  filename: cloudbuild.yaml

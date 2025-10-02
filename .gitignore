@@ -1,0 +1,106 @@
+# BRS-AI: AI-Powered Cybersecurity Analysis Tool
+# Company: EasyProTech LLC (www.easypro.tech)
+# Dev: Brabus
+# Date: 2025-09-08 21:07:30 MSK
+# Status: Created
+# Telegram: https://t.me/easyprotech
+
+# Environment files (CRITICAL - contains API keys)
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.env
+
+# API Keys and secrets
+config.json
+*.key
+*.pem
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.tox/
+.coverage
+.pytest_cache/
+htmlcov/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Logs
+*.log
+logs/
+
+# Results and outputs (sensitive data)
+results/
+output/
+reports/
+*.html
+*.json
+*.sarif
+*.xml
+*.csv
+*.txt
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Backup files
+*.bak
+*.backup
+*~

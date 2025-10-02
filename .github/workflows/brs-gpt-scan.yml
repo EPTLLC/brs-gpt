@@ -1,0 +1,122 @@
+# BRS-GPT: AI-Powered Cybersecurity Analysis Tool
+# Company: EasyProTech LLC (www.easypro.tech)
+# Dev: Brabus
+# Date: 2025-10-03 01:41:52 MSK
+# Status: Created
+# Telegram: https://t.me/easyprotech
+
+name: BRS-GPT Security Scan
+
+# NOTE: This workflow is DISABLED by default (manual trigger only)
+# To enable automatic scanning, uncomment the triggers below and add OPENAI_API_KEY to repository secrets
+
+on:
+  # Disabled: uncomment to enable automatic scanning
+  # push:
+  #   branches: [ main, develop ]
+  # pull_request:
+  #   branches: [ main ]
+  # schedule:
+  #   - cron: '0 2 * * 1'
+  
+  # Manual trigger only
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target domain to scan'
+        required: true
+        default: 'example.com'
+      profile:
+        description: 'Scan profile (lightning, fast, balanced, deep)'
+        required: false
+        default: 'fast'
+
+jobs:
+  security-scan:
+    name: BRS-GPT Security Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install BRS-GPT
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+
+      - name: Determine target
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "target=${{ github.event.inputs.target }}" >> $GITHUB_OUTPUT
+            echo "profile=${{ github.event.inputs.profile }}" >> $GITHUB_OUTPUT
+          else
+            echo "target=${{ secrets.SCAN_TARGET || 'example.com' }}" >> $GITHUB_OUTPUT
+            echo "profile=fast" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run BRS-GPT Scan
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          mkdir -p results
+          brs-gpt start ${{ steps.target.outputs.target }} \
+            --profile ${{ steps.target.outputs.profile }} \
+            --output results/security-report.html
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: brs-gpt-results
+          path: results/
+          retention-days: 30
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: results/*.sarif
+
+      - name: Check for critical findings
+        run: |
+          # Parse JSON report for critical findings
+          if [ -f "results/security-report.json" ]; then
+            CRITICAL_COUNT=$(jq '[.vulnerabilities[]? | select(.severity=="critical")] | length' results/security-report.json)
+            if [ "$CRITICAL_COUNT" -gt 0 ]; then
+              echo "::error::Found $CRITICAL_COUNT critical vulnerabilities"
+              exit 1
+            fi
+          fi
+
+      - name: Post results to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('results/security-report.txt', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## BRS-GPT Security Scan Results\n\n```\n' + report + '\n```'
+            });
+
+  notify:
+    name: Notify on Failure
+    needs: security-scan
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send notification
+        run: |
+          echo "Security scan failed! Check the results."
+          # Add Slack/Discord/Email notification here
+
